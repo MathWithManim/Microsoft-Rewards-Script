@@ -2,9 +2,8 @@ name: Daily Microsoft Rewards
 
 on:
   schedule:
-    # Run daily at random minute between 6-9 AM UTC (avoids exact-hour spikes)
     - cron: '37 6 * * *'
-  workflow_dispatch: # manual trigger
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -12,17 +11,30 @@ permissions:
 jobs:
   daily-rewards:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     env:
       ACCOUNT_1_EMAIL: ${{ secrets.ACCOUNT_1_EMAIL }}
       ACCOUNT_1_PASSWORD: ${{ secrets.ACCOUNT_1_PASSWORD }}
       ACCOUNT_1_TOTP_SECRET: ${{ secrets.ACCOUNT_1_TOTP_SECRET }}
       ACCOUNT_1_GEO_LOCALE: ${{ secrets.ACCOUNT_1_GEO_LOCALE || 'auto' }}
       ACCOUNT_1_LANG_CODE: ${{ secrets.ACCOUNT_1_LANG_CODE || 'en' }}
-      # Add more accounts as needed
+      # Browser settings for headless CI
+      PLAYWRIGHT_BROWSERS_PATH: /home/runner/.cache/ms-playwright
+      PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH: /home/runner/.cache/ms-playwright/chromium-1248/chrome-linux64/chrome
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Cache sessions & Playwright browser
+        uses: actions/cache@v4
+        with:
+          path: |
+            sessions
+            ~/.cache/ms-playwright
+          key: ms-rewards-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ github.run_number }}
+          restore-keys: |
+            ms-rewards-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-
+            ms-rewards-${{ runner.os }}-
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -39,12 +51,90 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Run Microsoft Rewards
-        run: npm start
+      - name: Fix session permissions
+        run: chmod -R 700 sessions 2>/dev/null || true
+
+      - name: Run Microsoft Rewards (Browser Mode)
+        id: browser
+        run: |
+          timeout 3600 npm start || true
         env:
           ACCOUNT_1_EMAIL: ${{ secrets.ACCOUNT_1_EMAIL }}
           ACCOUNT_1_PASSWORD: ${{ secrets.ACCOUNT_1_PASSWORD }}
           ACCOUNT_1_TOTP_SECRET: ${{ secrets.ACCOUNT_1_TOTP_SECRET }}
           ACCOUNT_1_GEO_LOCALE: ${{ secrets.ACCOUNT_1_GEO_LOCALE || 'auto' }}
           ACCOUNT_1_LANG_CODE: ${{ secrets.ACCOUNT_1_LANG_CODE || 'en' }}
-          # GitHub Actions runs headless automatically
+
+      - name: Check if browser mode succeeded
+        id: check
+        run: |
+          if [ -f sessions/sessions.db ]; then
+            echo "session_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "session_exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Fallback to API Mode (if browser failed)
+        if: steps.check.outputs.session_exists == 'false'
+        run: |
+          echo "Browser mode failed, trying API mode..."
+          # Create API config
+          cat > config.api.json <<'EOF'
+          {
+            "sessionPath": "sessions",
+            "headless": true,
+            "clusters": 1,
+            "rewardsMode": "api",
+            "errorDiagnostics": true,
+            "ensureStreakProtection": true,
+            "autoClaimPunchcardRewards": true,
+            "continueOnBotWarning": true,
+            "skipNonPointTasks": true,
+            "accountDelay": { "min": "30sec", "max": "60sec" },
+            "taskDelay": { "min": "15sec", "max": "30sec" },
+            "workers": {
+              "doDailySet": true,
+              "doClaimBonusPoints": true,
+              "doMorePromotions": true,
+              "doPunchCards": true,
+              "doAppPromotions": false,
+              "doDesktopSearch": true,
+              "doMobileSearch": true,
+              "doBonusSearches": true,
+              "doDailyCheckIn": true,
+              "doReadToEarn": false,
+              "doActivateSearchPerk": true,
+              "doVisualSearch": false
+            },
+            "activities": { "urlReward": true, "searchOnBing": true },
+            "searchOnBingLocalQueries": false,
+            "globalTimeout": "30sec",
+            "searchSettings": {
+              "maxSearchOnBingAttempts": 3,
+              "scrollRandomResults": false,
+              "clickRandomResults": false,
+              "runOnZeroPoints": false,
+              "maxBonusSearches": 90,
+              "parallelSearching": false,
+              "clusterSearch": false,
+              "useAccountLocale": true,
+              "queryEngines": ["google", "local", "wikipedia"],
+              "searchResultVisitTime": "10sec",
+              "searchDelay": { "min": "30sec", "max": "60sec" },
+              "readDelay": { "min": "30sec", "max": "60sec" }
+            },
+            "experimental": { "blockMedia": true, "edgeBrowsing": false, "browserSearchApiReport": false },
+            "debugLogs": true,
+            "consoleLogFilter": { "enabled": false, "mode": "whitelist", "levels": ["error", "warn"], "keywords": [], "regexPatterns": [] },
+            "proxy": { "queryEngine": true, "ignoreCertificateErrors": false },
+            "webhook": { "discord": { "enabled": false }, "telegram": { "enabled": false }, "ntfy": { "enabled": false }, "webhookLogFilter": { "enabled": false } }
+          }
+          EOF
+          # Run with API mode config
+          CONFIG_FILE=config.api.json timeout 1800 node dist/index.js || true
+        env:
+          ACCOUNT_1_EMAIL: ${{ secrets.ACCOUNT_1_EMAIL }}
+          ACCOUNT_1_PASSWORD: ${{ secrets.ACCOUNT_1_PASSWORD }}
+          ACCOUNT_1_TOTP_SECRET: ${{ secrets.ACCOUNT_1_TOTP_SECRET }}
+          ACCOUNT_1_GEO_LOCALE: ${{ secrets.ACCOUNT_1_GEO_LOCALE || 'auto' }}
+          ACCOUNT_1_LANG_CODE: ${{ secrets.ACCOUNT_1_LANG_CODE || 'en' }}
