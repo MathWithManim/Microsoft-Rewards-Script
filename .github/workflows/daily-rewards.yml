@@ -11,30 +11,16 @@ permissions:
 jobs:
   daily-rewards:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 45
     env:
       ACCOUNT_1_EMAIL: ${{ secrets.ACCOUNT_1_EMAIL }}
       ACCOUNT_1_PASSWORD: ${{ secrets.ACCOUNT_1_PASSWORD }}
       ACCOUNT_1_TOTP_SECRET: ${{ secrets.ACCOUNT_1_TOTP_SECRET }}
       ACCOUNT_1_GEO_LOCALE: ${{ secrets.ACCOUNT_1_GEO_LOCALE || 'auto' }}
       ACCOUNT_1_LANG_CODE: ${{ secrets.ACCOUNT_1_LANG_CODE || 'en' }}
-      # Browser settings for headless CI
-      PLAYWRIGHT_BROWSERS_PATH: /home/runner/.cache/ms-playwright
-      PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH: /home/runner/.cache/ms-playwright/chromium-1248/chrome-linux64/chrome
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Cache sessions & Playwright browser
-        uses: actions/cache@v4
-        with:
-          path: |
-            sessions
-            ~/.cache/ms-playwright
-          key: ms-rewards-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ github.run_number }}
-          restore-keys: |
-            ms-rewards-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-
-            ms-rewards-${{ runner.os }}-
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -45,40 +31,11 @@ jobs:
       - name: Install dependencies
         run: npm ci --include=dev
 
-      - name: Install Chromium
-        run: npm run install:browser
-
       - name: Build
         run: npm run build
 
-      - name: Fix session permissions
-        run: chmod -R 700 sessions 2>/dev/null || true
-
-      - name: Run Microsoft Rewards (Browser Mode)
-        id: browser
+      - name: Run Microsoft Rewards (API Mode)
         run: |
-          timeout 3600 npm start || true
-        env:
-          ACCOUNT_1_EMAIL: ${{ secrets.ACCOUNT_1_EMAIL }}
-          ACCOUNT_1_PASSWORD: ${{ secrets.ACCOUNT_1_PASSWORD }}
-          ACCOUNT_1_TOTP_SECRET: ${{ secrets.ACCOUNT_1_TOTP_SECRET }}
-          ACCOUNT_1_GEO_LOCALE: ${{ secrets.ACCOUNT_1_GEO_LOCALE || 'auto' }}
-          ACCOUNT_1_LANG_CODE: ${{ secrets.ACCOUNT_1_LANG_CODE || 'en' }}
-
-      - name: Check if browser mode succeeded
-        id: check
-        run: |
-          if [ -f sessions/sessions.db ]; then
-            echo "session_exists=true" >> $GITHUB_OUTPUT
-          else
-            echo "session_exists=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Fallback to API Mode (if browser failed)
-        if: steps.check.outputs.session_exists == 'false'
-        run: |
-          echo "Browser mode failed, trying API mode..."
-          # Create API config
           cat > config.api.json <<'EOF'
           {
             "sessionPath": "sessions",
@@ -130,8 +87,7 @@ jobs:
             "webhook": { "discord": { "enabled": false }, "telegram": { "enabled": false }, "ntfy": { "enabled": false }, "webhookLogFilter": { "enabled": false } }
           }
           EOF
-          # Run with API mode config
-          CONFIG_FILE=config.api.json timeout 1800 node dist/index.js || true
+          CONFIG_FILE=config.api.json timeout 1800 node dist/index.js
         env:
           ACCOUNT_1_EMAIL: ${{ secrets.ACCOUNT_1_EMAIL }}
           ACCOUNT_1_PASSWORD: ${{ secrets.ACCOUNT_1_PASSWORD }}
