@@ -1,0 +1,50 @@
+name: Daily Microsoft Rewards
+
+on:
+  schedule:
+    # Run daily at random minute between 6-9 AM UTC (avoids exact-hour spikes)
+    - cron: '37 6 * * *'
+  workflow_dispatch: # manual trigger
+
+permissions:
+  contents: read
+
+jobs:
+  daily-rewards:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      ACCOUNT_1_EMAIL: ${{ secrets.ACCOUNT_1_EMAIL }}
+      ACCOUNT_1_PASSWORD: ${{ secrets.ACCOUNT_1_PASSWORD }}
+      ACCOUNT_1_TOTP_SECRET: ${{ secrets.ACCOUNT_1_TOTP_SECRET }}
+      ACCOUNT_1_GEO_LOCALE: ${{ secrets.ACCOUNT_1_GEO_LOCALE || 'auto' }}
+      ACCOUNT_1_LANG_CODE: ${{ secrets.ACCOUNT_1_LANG_CODE || 'en' }}
+      # Add more accounts as needed
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '26'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --include=dev
+
+      - name: Install Chromium
+        run: npm run install:browser
+
+      - name: Build
+        run: npm run build
+
+      - name: Run Microsoft Rewards
+        run: npm start
+        env:
+          ACCOUNT_1_EMAIL: ${{ secrets.ACCOUNT_1_EMAIL }}
+          ACCOUNT_1_PASSWORD: ${{ secrets.ACCOUNT_1_PASSWORD }}
+          ACCOUNT_1_TOTP_SECRET: ${{ secrets.ACCOUNT_1_TOTP_SECRET }}
+          ACCOUNT_1_GEO_LOCALE: ${{ secrets.ACCOUNT_1_GEO_LOCALE || 'auto' }}
+          ACCOUNT_1_LANG_CODE: ${{ secrets.ACCOUNT_1_LANG_CODE || 'en' }}
+          # GitHub Actions runs headless automatically

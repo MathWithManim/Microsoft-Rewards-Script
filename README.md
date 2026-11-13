@@ -1,108 +1,65 @@
-# Microsoft Rewards Script
+# Microsoft Rewards Script (MathWithManim Fork)
 
-[![Validate](https://github.com/TheNetsky/Microsoft-Rewards-Script/actions/workflows/validate.yml/badge.svg?branch=v5)](https://github.com/TheNetsky/Microsoft-Rewards-Script/actions/workflows/validate.yml)
-![Version](https://img.shields.io/github/package-json/v/TheNetsky/Microsoft-Rewards-Script/v5)
-[![Docker image (GHCR)](https://img.shields.io/badge/Docker-GHCR%20v5-2496ED?logo=docker&logoColor=white)](https://github.com/TheNetsky/Microsoft-Rewards-Script/pkgs/container/microsoft-rewards-script)
-![Node.js](https://img.shields.io/badge/node-%3E%3D24-green)
-[![License](https://img.shields.io/badge/license-GPL--3.0-blue)](LICENSE)
-[![Donate](https://img.shields.io/badge/Donate-Ko--fi-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/thenetsky)
+Forked from [TheNetsky/Microsoft-Rewards-Script](https://github.com/TheNetsky/Microsoft-Rewards-Script) with anti-bot hardening and GitHub Actions daily cron.
 
-Microsoft Rewards automation with API and browser modes, saved sessions,
-multiple accounts, localised searches and an optional Control API.
+## What's Different
 
-## Features
+- **Human-like delays**: Randomized account/task/search delays (45s-3min)
+- **Natural search behavior**: Random scrolling, clicking, varied query engines
+- **Reduced parallelism**: Sequential searches to avoid fingerprint correlation
+- **GitHub Actions workflow**: Daily run at 06:37 UTC (randomized minute)
+- **Bonus searches enabled**: Up to 90/day with human-like patterns
 
-- Daily Set, promotions, punchcards and bonus-point claims.
-- Desktop/mobile searches, Explore on Bing, Daily Check-In and Read to Earn.
-- Optional Visual Search and background Edge browsing.
-- Streak progress, API-based streak protection and verified point reporting.
-- Scheduled runs, account selection, saved sessions and Discord/Telegram/ntfy notifications.
-- Control API with live events, persistent history, punchcard progress and activity balance observations.
-
-Activities depend on the account and region. This branch contains v5; earlier
-versions remain available on [v3](https://github.com/TheNetsky/Microsoft-Rewards-Script/tree/v3)
-and [v4](https://github.com/TheNetsky/Microsoft-Rewards-Script/tree/v4).
-
-## Documentation
-
-- [Setup and usage](docs/usage.md) — local, Nix and Docker installation, accounts, settings, commands and troubleshooting.
-- [Control API](docs/control-api.md) — authentication, endpoints, run control, scheduling and dashboard data.
-
-## Setup
-
-Requires Node.js 24 or newer.
+## Quick Start (Local)
 
 ```sh
-npm ci
+# 1. Install deps
+npm ci --include=dev
+
+# 2. Install Chromium (one-time)
 npm run install:browser
+
+# 3. Build
 npm run build
+
+# 4. Configure accounts
 cp env.example .env
-cp config.example.json config.json
-```
+# Edit .env with your Microsoft account(s)
 
-On Linux, install Chromium's system libraries with
-`npx patchright install --with-deps chromium`.
-On Windows, copy the example files with File Explorer or PowerShell's `Copy-Item`.
-
-Set `ACCOUNT_1_EMAIL` and the relevant sign-in settings in `.env`, then run:
-
-```sh
+# 5. Run
 npm start
 ```
 
-Add another numbered account block for each account. Passwords are optional for
-passwordless accounts. See [env.example](env.example) for account variables and
-[Setup and usage](docs/usage.md#accounts-and-sessions) for login options.
+## GitHub Actions Setup (Automated Daily Runs)
 
-## Modes and settings
+1. Go to **Settings → Secrets and variables → Actions**
+2. Add repository secrets:
+   - `ACCOUNT_1_EMAIL` — your Microsoft email
+   - `ACCOUNT_1_PASSWORD` — your password (or leave empty for Authenticator)
+   - `ACCOUNT_1_TOTP_SECRET` — base32 TOTP secret (if 2FA enabled)
+   - `ACCOUNT_1_GEO_LOCALE` — `auto` (default) or country code like `US`
+   - `ACCOUNT_1_LANG_CODE` — `en` (default)
+3. Enable workflow: **Actions → Daily Microsoft Rewards → Enable workflow**
 
-Edit [config.json](config.example.json) before starting a run.
+The workflow runs daily at ~06:37 UTC (randomized to avoid detection).
 
-| Setting                            | Purpose                                                        |
-| ---------------------------------- | -------------------------------------------------------------- |
-| `rewardsMode: "browser"`           | Complete web activities through rendered cards and GhostCursor |
-| `rewardsMode: "api"`               | Save the sign-in session, close its browser and use HTTP       |
-| `searchSettings.parallelSearching` | Overlap desktop and mobile work when enabled                   |
-| `workers`                          | Enable or disable individual tasks                             |
-| `taskDelay`                        | Delay between activities                                       |
-| `searchSettings.searchDelay`       | Delay between searches                                         |
-| `searchSettings.useAccountLocale`  | Select queries using the account country                       |
-| `ensureStreakProtection`           | Enable and verify protection over HTTP in both modes           |
-| `experimental`                     | Optional features; disabled by default                         |
-
-See the full [settings reference](docs/usage.md#settings-reference) for all options.
-
-## Sessions
-
-To sign in manually on a desktop with a visible browser:
+## Human-like Search Queries
 
 ```sh
-npm run manual-login -- user@example.com --platform both
-npm run open-session -- --help
+# Generate natural queries for testing
+npx ts-node scripts/humanQueries.ts 30
 ```
 
-Sessions are saved under `sessionPath`. Keep `.env`, local configuration,
-session databases and diagnostics private.
+## Configuration
 
-## Docker
-
-Create `.env` from `env.example`, then review the timezone and schedule in
-[compose.yaml](compose.yaml).
-
-```sh
-docker compose up -d --build
-docker compose logs -f
-```
-
-The published v5 image is `ghcr.io/thenetsky/microsoft-rewards-script:5`.
-To use it instead of building locally, follow the [Docker image instructions](docs/usage.md#docker).
-
-Docker persists configuration in `./config`, sessions in `./sessions` and optional
-error captures in `./diagnostics`. It creates `config/config.json` from defaults
-when needed. `RUN_ON_START` controls the first run; `CRON_SCHEDULE` sets the initial
-schedule. Control API schedule changes persist in `config/schedule.json`.
-See [Control API Docker setup](docs/control-api.md#docker) to enable the server.
+Edit `config.json` for behavior tuning. Key anti-bot settings:
+- `accountDelay`: 2-5 min between accounts
+- `taskDelay`: 30-90 sec between tasks  
+- `searchDelay`: 45 sec - 2 min between searches
+- `readDelay`: 1-3 min on result pages
+- `parallelSearching`: false (sequential = more human)
+- `scrollRandomResults` / `clickRandomResults`: true
 
 ## License
 
-[GPL-3.0-or-later](LICENSE).
+GPL-3.0-or-later — same as upstream.
