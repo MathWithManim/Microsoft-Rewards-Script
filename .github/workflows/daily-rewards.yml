@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   daily-rewards:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     timeout-minutes: 45
     env:
       ACCOUNT_1_EMAIL: ${{ secrets.ACCOUNT_1_EMAIL }}
